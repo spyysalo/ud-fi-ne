@@ -31,3 +31,19 @@ for s in train dev test; do
     )
 done
 ```
+
+Get untokenized texts
+
+```
+for s in train dev test; do
+    d=${s}-texts
+    (
+	mkdir $d
+	cd $d
+	for f in ../${s}-split/*.conllu; do
+	    egrep '^# text = ' $f | perl -pe 's/^# text = //' \
+	    	  > $(basename $f .conllu).txt
+	done
+    )
+done
+```
