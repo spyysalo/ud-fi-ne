@@ -17,6 +17,18 @@ for s in train dev test; do
 done
 ```
 
+Get tokenized text
+
+```
+for s in train dev test; do
+    mkdir ${s}-tokenized
+    for f in ${s}-split/*.conllu; do
+        python3 scripts/get_tokenized.py $f \
+	    > ${s}-tokenized/$(basename $f .conllu).txt
+    done
+done
+```
+
 Convert into brat-flavored standoff
 
 ```

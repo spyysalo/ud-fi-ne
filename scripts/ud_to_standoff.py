@@ -4,9 +4,14 @@
 
 import os
 import sys
+import re
 
 from collections import namedtuple
 
+
+EMPTY_NODE_RE = re.compile(r'^(\d+)\.(\d+)')
+
+MULTIWORD_RE = re.compile(r'^(\d+)-(\d+)')
 
 Word = namedtuple('Word', 'id form lemma upos xpos feats head deprel deps misc')
 
@@ -25,6 +30,37 @@ def group_into_sentences(conll_lines):
         else:
             current.append(line)
     return sentences
+
+
+def remove_empty_nodes(sentences):
+    removed = []
+    for s in sentences:
+        removed.append([w for w in s if not EMPTY_NODE_RE.search(w)])
+    return removed
+
+
+def remove_multiword_tokens(sentences):
+    removed = []
+    for s in sentences:
+        current, skip, mw_text = [], [], None
+        for w in s:
+            m = MULTIWORD_RE.search(w)
+            if m:
+                start, end = (int(i) for i in m.groups())
+                skip = list(range(start, end+1))
+                mw_text = w.split('\t')[1]
+            else:
+                id_ = int(w.split('\t')[0])
+                if id_ in skip:
+                    fields = w.split('\t')
+                    if id_ == skip[0]:
+                        fields[1] = mw_text    # first part gets text
+                    else:
+                        fields[1] = ''    # rest are left blank
+                    w = '\t'.join(fields)
+                current.append(w)
+        removed.append(current)
+    return removed
 
 
 def name_spans(words):
@@ -68,8 +104,12 @@ def word_offsets(words, base_offset):
     for word in words:
         if not word.id.isdigit():
             continue    # skip multiword tokens and empties
-        offsets[int(word.id)] = (current, current+len(word.form))
-        current += len(word.form)+1
+        if word.form == '':
+            # empty "word" from multiword elimination
+            offsets[int(word.id)] = (current, current)
+        else:
+            offsets[int(word.id)] = (current, current+len(word.form))
+            current += len(word.form)+1
     return offsets
 
 
@@ -78,7 +118,7 @@ def span_text(words, start_token, end_token):
         w for w in words
         if w.id.isdigit() and start_token <= int(w.id) <= end_token
     ]
-    return ' '.join(w.form for w in spanned)
+    return ' '.join(w.form for w in spanned if w.form != '')
 
     
 def main(argv):
@@ -91,6 +131,8 @@ def main(argv):
         lines = [l.rstrip('\n') for l in f]
 
     sentences = group_into_sentences(lines)
+    sentences = remove_empty_nodes(sentences)
+    sentences = remove_multiword_tokens(sentences)
 
     doc_text, textbounds = '', []
     for sentence in sentences:
@@ -105,7 +147,7 @@ def main(argv):
             ))
         doc_text += ' '.join(
             w.form for w in words
-            if w.id.isdigit()
+            if w.id.isdigit() and w.form != ''
         ) + '\n'
 
     root, _ = os.path.splitext(os.path.basename(argv[1]))
